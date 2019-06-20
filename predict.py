@@ -24,7 +24,7 @@ class Predictor(object):
 
         self.load_labels(category_names)
 
-    def load_checkpoint(self, ckpt_path, use_gpu):
+    def load_checkpoint(self, ckpt_path):
         """
         Load trained model's checkpoint
         """
@@ -79,7 +79,7 @@ class Predictor(object):
         if use_gpu:
             self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         logging.info("using device: {}".format(self.device))
-        self.load_checkpoint(ckpt_path, use_gpu)
+        self.load_checkpoint(ckpt_path)
 
         self.ckpt_model.eval()
 
