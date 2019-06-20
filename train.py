@@ -1,5 +1,8 @@
+#!/usr/bin/env python3
 import copy
 import json
+import logging
+import os
 import time
 from collections import OrderedDict
 
@@ -10,186 +13,279 @@ import torchvision
 import torchvision.models as models
 import torchvision.transforms as transforms
 
-# check available device for training
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-print("device available: ", device)
+logging.basicConfig(level=logging.INFO)
 
-# dataset
-data_dir = 'flower_data'
-train_dir = data_dir + '/train'
-valid_dir = data_dir + '/valid'
-test_dir = data_dir + '/test'
+class Trainer(object):
 
-# transforms
-mean = [0.485, 0.456, 0.406]
-std = [0.229, 0.224, 0.225]
-image_size = 224
+    def __init__(self, data_dir, category_names):
+        """
+        Sets default device to CPU and initializes category names
+        """
+        self.device = torch.device("cpu")
+        self.data_dir = data_dir
+        self.train_dir = self.data_dir + "/train"
+        self.valid_dir = self.data_dir + "/valid"
+        self.test_dir = self.data_dir + "/test"
+        self.mean = [0.485, 0.456, 0.406]
+        self.std = [0.229, 0.224, 0.225]
+        self.image_size = 224
 
-data_transforms = {
-    "train": transforms.Compose([transforms.RandomRotation(25),
-                                 transforms.RandomResizedCrop(image_size),
-                                 transforms.RandomHorizontalFlip(),
-                                 transforms.ToTensor(),
-                                 transforms.Normalize(mean, std)]),
-    "valid": transforms.Compose([transforms.Resize(256),
-                                 transforms.CenterCrop(image_size),
-                                 transforms.ToTensor(),
-                                 transforms.Normalize(mean, std)]),
-    "test" : transforms.Compose([transforms.Resize(256),
-                                 transforms.CenterCrop(image_size),
-                                 transforms.ToTensor(),
-                                 transforms.Normalize(mean, std)])
-}
+        self.labels = self.load_labels(category_names)
 
-image_datasets = {
-    "train" : torchvision.datasets.ImageFolder(root=train_dir, transform=data_transforms["train"]),
-    "valid" : torchvision.datasets.ImageFolder(root=valid_dir, transform=data_transforms["valid"]),
-    "test"  : torchvision.datasets.ImageFolder(root=test_dir, transform=data_transforms["test"])
-}
+    @property
+    def data_transforms(self):
+        """
+        Provides Data Transforms for various dataset (train, test, valid)
+        """
+        return {
+            "train": transforms.Compose([transforms.RandomRotation(25),
+                                        transforms.RandomResizedCrop(self.image_size),
+                                        transforms.RandomHorizontalFlip(),
+                                        transforms.ToTensor(),
+                                        transforms.Normalize(self.mean, self.std)]),
+            "valid": transforms.Compose([transforms.Resize(256),
+                                        transforms.CenterCrop(self.image_size),
+                                        transforms.ToTensor(),
+                                        transforms.Normalize(self.mean, self.std)]),
+            "test" : transforms.Compose([transforms.Resize(256),
+                                        transforms.CenterCrop(self.image_size),
+                                        transforms.ToTensor(),
+                                        transforms.Normalize(self.mean, self.std)])
+        }
 
-dataloaders = {
-    "train": torch.utils.data.DataLoader(image_datasets["train"], batch_size=32, shuffle=True),
-    "valid": torch.utils.data.DataLoader(image_datasets["valid"], batch_size=32),
-    "test" : torch.utils.data.DataLoader(image_datasets["test"], batch_size=32)
-}
+    @property
+    def image_datasets(self):
+        """
+        Provides image dataset for various dataset category (train, test, valid)
+        """
+        return {
+            "train" : torchvision.datasets.ImageFolder(root=self.train_dir, transform=self.data_transforms["train"]),
+            "valid" : torchvision.datasets.ImageFolder(root=self.valid_dir, transform=self.data_transforms["valid"]),
+            "test"  : torchvision.datasets.ImageFolder(root=self.test_dir, transform=self.data_transforms["test"])
+        }
 
-with open('cat_to_name.json', 'r') as f:
-    cat_to_name = json.load(f)
+    @property
+    def dataloaders(self):
+        """
+        Provides DataLoader object for various datasets (train, test, valid)
+        """
+        return {
+            "train": torch.utils.data.DataLoader(self.image_datasets["train"], batch_size=32, shuffle=True),
+            "valid": torch.utils.data.DataLoader(self.image_datasets["valid"], batch_size=32),
+            "test" : torch.utils.data.DataLoader(self.image_datasets["test"], batch_size=32)
+        }
 
-# Analysis
-print("train images: ", len(image_datasets["train"]))
-print("valid images: ", len(image_datasets["valid"]))
-print("test images: ", len(image_datasets["test"]))
-print("total labels: ", len(cat_to_name))
+    def load_labels(self, category_names):
+        """
+        Load category names map {key:value}
+        where key is index and value is name of category
+        """
+        with open(category_names, 'r') as f:
+            labels = json.load(f)
+        return labels
 
-### Training
-def train_model(model, criterion, optimizer, num_epochs=25):
-    since = time.time()
+    def __train_model(self, model, criterion, optimizer, num_epochs=25):
+        """
+        Helper function for training model
+        """
+        since = time.time()
 
-    best_model_wts = copy.deepcopy(model.state_dict())
-    best_acc = 0.0
+        best_model_wts = copy.deepcopy(model.state_dict())
+        best_acc = 0.0
 
-    for epoch in range(num_epochs):
-        print("Epoch {}/{}".format(epoch, num_epochs - 1))
-        print("-" * 10)
+        for epoch in range(num_epochs):
+            logging.info("Epoch {}/{}".format(epoch, num_epochs - 1))
+            logging.info("-" * 10)
 
-        for phase in ["train", "valid"]:
-            if phase == "train":
-                model.train()
-            else:
-                model.eval()
+            for phase in ["train", "valid"]:
+                if phase == "train":
+                    model.train()
+                else:
+                    model.eval()
 
-            running_loss = 0.0
-            running_corrects = 0.0
+                running_loss = 0.0
+                running_corrects = 0.0
 
-            for inputs, labels in dataloaders[phase]:
-                inputs = inputs.to(device)
-                labels = labels.to(device)
+                for inputs, labels in self.dataloaders[phase]:
+                    inputs = inputs.to(self.device)
+                    labels = labels.to(self.device)
 
-                # zero the parameter gradients
-                optimizer.zero_grad()
+                    # zero the parameter gradients
+                    optimizer.zero_grad()
 
-                # forward
-                # track history if only in train
-                with torch.set_grad_enabled(phase == "train"):
-                    outputs = model(inputs)
-                    _, preds = torch.max(outputs, 1)
-                    loss = criterion(outputs, labels)
+                    # forward
+                    # track history if only in train
+                    with torch.set_grad_enabled(phase == "train"):
+                        outputs = model(inputs)
+                        _, preds = torch.max(outputs, 1)
+                        loss = criterion(outputs, labels)
 
-                    # backward + optimise if only in training phase
-                    if phase == "train":
-                        loss.backward()
-                        optimizer.step()
+                        # backward + optimise if only in training phase
+                        if phase == "train":
+                            loss.backward()
+                            optimizer.step()
 
-                # statistics
-                running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
+                    # statistics
+                    running_loss += loss.item() * inputs.size(0)
+                    running_corrects += torch.sum(preds == labels.data)
 
-            epoch_loss = running_loss / len(image_datasets[phase])
-            epoch_acc = running_corrects.double() / len(image_datasets[phase])
+                epoch_loss = running_loss / len(self.image_datasets[phase])
+                epoch_acc = running_corrects.double() / len(self.image_datasets[phase])
 
-            print("{} Loss: {:.4f} Acc: {:.4f}".format(phase, epoch_loss, epoch_acc))
+                logging.info("{} Loss: {:.4f} Acc: {:.4f}".format(phase, epoch_loss, epoch_acc))
 
-            # deep copy the model
-            if phase == "valid" and epoch_acc > best_acc:
-                best_acc = epoch_acc
-                best_model_wts = copy.deepcopy(model.state_dict())
+                # deep copy the model
+                if phase == "valid" and epoch_acc > best_acc:
+                    best_acc = epoch_acc
+                    best_model_wts = copy.deepcopy(model.state_dict())
 
-        print()
+            logging.info("")
 
-    time_elapsed = time.time() - since
-    print("Training complete in {:.0f}m {:.0f}s".format(time_elapsed // 60, time_elapsed % 60))
-    print("Best val Acc: {:4f}".format(best_acc))
+        time_elapsed = time.time() - since
+        logging.info("Training complete in {:.0f}m {:.0f}s".format(time_elapsed // 60, time_elapsed % 60))
+        logging.info("Best val Acc: {:4f}".format(best_acc))
 
-    # load best model weights
-    model.load_state_dict(best_model_wts)
-    return model
+        # load best model weights
+        model.load_state_dict(best_model_wts)
+        return model
 
-# hyper parameters
-num_epochs = 5
-learning_rate = 0.001
+    def train(self, arch, learning_rate, num_epochs, use_gpu, hidden_units):
+        """
+        Trains model of provided arch for num_epochs
+        """
+        self.num_epochs = num_epochs
+        self.arch = arch
+        if use_gpu:
+            self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        logging.info("using device: {}".format(self.device))
 
-# train functions
-model_fn = models.vgg16(pretrained=True)
+        # train functions
+        if not arch.startswith("vgg") and not arch.startswith("densenet"):
+            raise Exception("Only VGG or Densenet varients are supported")
 
-# fixed feature extractor
-for param in model_fn.parameters():
-    param.requires_grad = False
+        logging.info("using pretrained model: {}".format(arch))
+        model_fn = models.__dict__[arch](pretrained=True)
 
-output_size = len(cat_to_name)
-input_size = model_fn.classifier[0].in_features
-hidden_size = [
-    (input_size // 8),
-    (input_size // 32)
-]
+        # fixed feature extractor
+        for param in model_fn.parameters():
+            param.requires_grad = False
 
-classifier = nn.Sequential(OrderedDict([
-    ('fc1', nn.Linear(input_size, hidden_size[0])),
-    ('relu1', nn.ReLU()),
-    ('dropout', nn.Dropout(p=0.15)),
-    ('fc2', nn.Linear(hidden_size[0], hidden_size[1])),
-    ('relu2', nn.ReLU()),
-    ('dropout', nn.Dropout(p=0.15)),
-    ('output', nn.Linear(hidden_size[1], output_size)),
-    ('softmax', nn.LogSoftmax(dim=1))
-]))
-model_fn.classifier = classifier
+        output_size = len(self.labels)
 
-model_fn = model_fn.to(device)
+        input_size = 0
 
-criterion_fn = nn.NLLLoss()
-optimizer_fn = optim.Adam(model_fn.classifier.parameters(), lr=learning_rate)
+        if arch.startswith("vgg"):
+            input_size = model_fn.classifier[0].in_features
 
-# train model
-model = train_model(model_fn, criterion_fn, optimizer_fn, num_epochs)
+        if arch.startswith("densenet"):
+            densenet_input = {
+                'densenet121': 1024,
+                'densenet169': 1664,
+                'densenet161': 2208,
+                'densenet201': 1920
+            }
+            input_size = densenet_input[arch]
 
-# Disabling gradient calculation
-corrects = 0
-total = 0
-total_images = len(dataloaders["test"].batch_sampler) * dataloaders["test"].batch_size
+        od = OrderedDict()
+        hidden_sizes = hidden_units
+        hidden_sizes.insert(0, input_size)
 
-# Disabling gradient calculation
-with torch.no_grad():
-    for inputs, labels in dataloaders["test"]:
-        inputs = inputs.to(device)
-        labels = labels.to(device)
+        for i in range(len(hidden_sizes) - 1):
+            od['fc' + str(i + 1)] = nn.Linear(hidden_sizes[i], hidden_sizes[i + 1])
+            od['relu' + str(i + 1)] =  nn.ReLU()
+            od['dropout' + str(i + 1)] = nn.Dropout(p=0.15)
+        od['output'] = nn.Linear(hidden_sizes[i + 1], output_size)
+        od['softmax'] = nn.LogSoftmax(dim=1)
 
-        outputs = model(inputs)
-        _, preds = torch.max(outputs, 1)
+        self.classifier = nn.Sequential(od)
 
-        corrects += (preds == labels).sum().item()
-        total += labels.size(0)
+        model_fn.classifier = self.classifier
 
-print("Accurately classified {:d}%% of {:d} images".format(100 * corrects // total, total_images))
+        model_fn = model_fn.to(self.device)
 
-## Save Checkpoint
-model.class_to_idx = image_datasets['train'].class_to_idx
-model_state = {
-    'epoch': num_epochs,
-    'state_dict': model.state_dict(),
-    'optimizer_dict': optimizer_fn.state_dict(),
-    'classifier': classifier,
-    'class_to_idx': model.class_to_idx,
-}
+        self.criterion_fn = nn.NLLLoss()
+        self.optimizer_fn = optim.Adam(model_fn.classifier.parameters())
 
-torch.save(model_state, "./vgg16_classifier.pth")
+        # train model
+        self.model = self.__train_model(model_fn, self.criterion_fn, self.optimizer_fn,self.num_epochs)
+
+        return self.model
+
+    def test_accuracy(self):
+        """
+        Provides test set accuracy
+        """
+        # Disabling gradient calculation
+        corrects = 0
+        total = 0
+        total_images = len(self.dataloaders["test"].batch_sampler) * self.dataloaders["test"].batch_size
+
+        # Disabling gradient calculation
+        with torch.no_grad():
+            for inputs, labels in self.dataloaders["test"]:
+                inputs = inputs.to(self.device)
+                labels = labels.to(self.device)
+
+                outputs = self.model(inputs)
+                _, preds = torch.max(outputs, 1)
+
+                corrects += (preds == labels).sum().item()
+                total += labels.size(0)
+
+        test_acc = 100 * corrects // total
+        logging.info("Accurately classified {:d}% of {:d} images".format(test_acc, total_images))
+        return test_acc
+
+    def save_checkpoint(self, save_dir):
+        """
+        Save trained model checkpoint along with num_epochs, optimizer and
+        class_to_idx information
+        """
+        self.model.class_to_idx = self.image_datasets['train'].class_to_idx
+        model_state = {
+            'epoch': self.num_epochs,
+            'state_dict': self.model.state_dict(),
+            'optimizer_dict': self.optimizer_fn.state_dict(),
+            'classifier': self.classifier,
+            'class_to_idx': self.model.class_to_idx,
+        }
+
+        if not os.path.exists(save_dir):
+            os.mkdir(save_dir)
+
+        torch.save(model_state, os.path.join(save_dir, self.arch + "_retrained.pth"))
+
+
+def main():
+    import argparse
+
+    logging.basicConfig(level=logging.INFO)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("data_directory", action="store")
+    parser.add_argument("--category_names", type=str, help="categories name json file", default="cat_to_name.json")
+    parser.add_argument("--save_dir", type=str, help="save directory for checkpoint", default="./")
+    parser.add_argument("--learning_rate", type=float, help="learning rate for training", default=0.001)
+    parser.add_argument("--hidden_units", type=int, nargs='+',help="hidden units for classifier", default=[3136, 784])
+    parser.add_argument("--arch", type=str, help="architecture of classifier model", default="vgg16")
+    parser.add_argument("--epochs", type=int, help="training epochs", default=1)
+    parser.add_argument("--gpu", action="store_true", help="use GPU if available", default=False)
+
+    args = parser.parse_args()
+    logging.info("Args: {}".format(args))
+
+    if not os.path.exists(args.data_directory):
+        raise Exception("Unable to locate data dir '{}'".format(args.data_directory))
+
+    if not os.path.exists(args.category_names):
+        raise Exception("Unable to locate labels file '{}'".format(args.category_names))
+
+
+    trainer = Trainer(args.data_directory, args.category_names)
+
+    trainer.train(arch=args.arch, learning_rate=args.learning_rate, num_epochs=args.epochs, use_gpu=args.gpu, hidden_units=args.hidden_units)
+    trainer.test_accuracy()
+    trainer.save_checkpoint(save_dir=args.save_dir)
+
+if __name__ == "__main__":
+    main()
