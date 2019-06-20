@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import copy
 import json
-import time
+import logging
 import os
+import time
 from collections import OrderedDict
 
 import torch
@@ -11,7 +12,6 @@ import torch.optim as optim
 import torchvision
 import torchvision.models as models
 import torchvision.transforms as transforms
-import logging
 
 logging.basicConfig(level=logging.INFO)
 
@@ -236,14 +236,15 @@ def main():
     parser.add_argument("--gpu", action="store_true", help="use GPU if available", default=False)
 
     args = parser.parse_args()
+    logging.info("Args: {}".format(args))
 
     if not os.path.exists(args.data_directory):
         raise Exception("Unable to locate data dir '{}'".format(args.data_directory))
 
-    if not os.path.exists(args.labels):
-        raise Exception("Unable to locate labels file '{}'".format(args.labels))
+    if not os.path.exists(args.category_names):
+        raise Exception("Unable to locate labels file '{}'".format(args.category_names))
 
-    logging.info("Received arguments: {}".format(args))
+
     trainer = Trainer(args.data_directory, args.category_names)
 
     trainer.train(arch=args.arch, learning_rate=args.learning_rate, num_epochs=args.epochs, use_gpu=args.gpu, hidden_units=args.hidden_units)

@@ -1,12 +1,14 @@
 import json
 import logging
 import os
+
 import numpy as np
 import torch
 import torchvision.models as models
 import torchvision.transforms as transforms
 from matplotlib import pyplot as plt
 from PIL import Image
+
 
 class Predictor(object):
 
