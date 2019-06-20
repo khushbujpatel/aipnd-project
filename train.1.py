@@ -144,8 +144,8 @@ class Trainer(object):
         logging.info("using device: {}".format(self.device))
 
         # train functions
-        if not arch.startswith("vgg"):
-            raise Exception("Only VGG varients are supported")
+        if not arch.startswith("vgg") and not arch.startswith("densenet"):
+            raise Exception("Only VGG or Densenet varients are supported")
 
         logging.info("using pretrained model: {}".format(arch))
         model_fn = models.__dict__[arch](pretrained=True)
@@ -155,7 +155,20 @@ class Trainer(object):
             param.requires_grad = False
 
         output_size = len(self.labels)
-        input_size = model_fn.classifier[0].in_features
+
+        input_size = 0
+
+        if arch.startswith("vgg"):
+            input_size = model_fn.classifier[0].in_features
+
+        if arch.startswith("densenet"):
+            densenet_input = {
+                'densenet121': 1024,
+                'densenet169': 1664,
+                'densenet161': 2208,
+                'densenet201': 1920
+            }
+            input_size = densenet_input[arch]
 
         od = OrderedDict()
         hidden_sizes = hidden_units
