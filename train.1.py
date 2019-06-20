@@ -17,9 +17,11 @@ logging.basicConfig(level=logging.INFO)
 
 class Trainer(object):
 
-    def __init__(self, data_dir, labels_filename):
+    def __init__(self, data_dir, category_names):
+        """
+        Sets default device to CPU and initializes category names
+        """
         self.device = torch.device("cpu")
-        self.labels_filename = labels_filename
         self.data_dir = data_dir
         self.train_dir = self.data_dir + "/train"
         self.valid_dir = self.data_dir + "/valid"
@@ -28,10 +30,13 @@ class Trainer(object):
         self.std = [0.229, 0.224, 0.225]
         self.image_size = 224
 
-        self._labels = None
+        self.labels = self.load_labels(category_names)
 
     @property
     def data_transforms(self):
+        """
+        Provides Data Transforms for various dataset (train, test, valid)
+        """
         return {
             "train": transforms.Compose([transforms.RandomRotation(25),
                                         transforms.RandomResizedCrop(self.image_size),
@@ -50,6 +55,9 @@ class Trainer(object):
 
     @property
     def image_datasets(self):
+        """
+        Provides image dataset for various dataset category (train, test, valid)
+        """
         return {
             "train" : torchvision.datasets.ImageFolder(root=self.train_dir, transform=self.data_transforms["train"]),
             "valid" : torchvision.datasets.ImageFolder(root=self.valid_dir, transform=self.data_transforms["valid"]),
@@ -58,18 +66,23 @@ class Trainer(object):
 
     @property
     def dataloaders(self):
+        """
+        Provides DataLoader object for various datasets (train, test, valid)
+        """
         return {
             "train": torch.utils.data.DataLoader(self.image_datasets["train"], batch_size=32, shuffle=True),
             "valid": torch.utils.data.DataLoader(self.image_datasets["valid"], batch_size=32),
             "test" : torch.utils.data.DataLoader(self.image_datasets["test"], batch_size=32)
         }
 
-    @property
-    def labels(self):
-        if not self._labels:
-            with open(self.labels_filename, 'r') as f:
-                self._labels = json.load(f)
-        return self._labels
+    def load_labels(self, category_names):
+        """
+        Load category names map {key:value}
+        where key is index and value is name of category
+        """
+        with open(category_names, 'r') as f:
+            labels = json.load(f)
+        return labels
 
     def __train_model(self, model, criterion, optimizer, num_epochs=25):
         """
@@ -137,6 +150,9 @@ class Trainer(object):
         return model
 
     def train(self, arch, learning_rate, num_epochs, use_gpu, hidden_units):
+        """
+        Trains model of provided arch for num_epochs
+        """
         self.num_epochs = num_epochs
         self.arch = arch
         if use_gpu:
@@ -196,6 +212,9 @@ class Trainer(object):
         return self.model
 
     def test_accuracy(self):
+        """
+        Provides test set accuracy
+        """
         # Disabling gradient calculation
         corrects = 0
         total = 0
@@ -218,6 +237,10 @@ class Trainer(object):
         return test_acc
 
     def save_checkpoint(self, save_dir):
+        """
+        Save trained model checkpoint along with num_epochs, optimizer and
+        class_to_idx information
+        """
         self.model.class_to_idx = self.image_datasets['train'].class_to_idx
         model_state = {
             'epoch': self.num_epochs,

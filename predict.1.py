@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import json
 import logging
 import os
@@ -13,6 +14,9 @@ from PIL import Image
 class Predictor(object):
 
     def __init__(self, category_names):
+        """
+        Sets default device to CPU and initializes category names
+        """
         self.device = torch.device("cpu")
         self.mean = [0.485, 0.456, 0.406]
         self.std = [0.229, 0.224, 0.225]
@@ -21,6 +25,9 @@ class Predictor(object):
         self.load_labels(category_names)
 
     def load_checkpoint(self, ckpt_path):
+        """
+        Load trained model's checkpoint
+        """
         ckpt_model_state = torch.load(ckpt_path)
 
         self.ckpt_model = models.vgg16(pretrained=True)
@@ -31,10 +38,9 @@ class Predictor(object):
         return self.ckpt_model
 
     def load_image(self, image_path):
-        '''
+        """
         Scales, crops, and normalizes a PIL image for a PyTorch model,
-        returns an Numpy array
-        '''
+        """
         image = Image.open(image_path).convert("RGB")
 
         transform = transforms.Compose([transforms.Resize(256),
@@ -47,7 +53,7 @@ class Predictor(object):
 
     def imshow(self, image, ax=None, title=None):
         """
-        image show for Tensor
+        Image show for Tensor
         """
         if ax is None:
             _, ax = plt.subplots()
@@ -65,9 +71,9 @@ class Predictor(object):
         return ax
 
     def predict(self, image_path, ckpt_path, use_gpu=False, topk=5):
-        '''
+        """
         Predict the class (or classes) of an image using a trained deep learning model.
-        '''
+        """
         if use_gpu:
             self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         logging.info("using device: {}".format(self.device))
@@ -92,6 +98,10 @@ class Predictor(object):
         return top_prob.numpy()[0], mapped_classes
 
     def load_labels(self, category_names):
+        """
+        Load category names map {key:value}
+        where key is index and value is name of category
+        """
         with open(category_names, 'r') as f:
             self.labels = json.load(f)
         return self.labels
@@ -122,7 +132,7 @@ def main():
 
     predictor = Predictor(args.category_names)
 
-    top_prob, top_classes = predictor.predict(args.image_path, args.checkpoint)
+    top_prob, top_classes = predictor.predict(args.image_path, args.checkpoint, args.gpu, args.top_k)
 
     label = top_classes[0]
 
