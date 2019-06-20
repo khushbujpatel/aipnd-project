@@ -9,7 +9,6 @@ import torch.optim as optim
 import torchvision
 import torchvision.models as models
 import torchvision.transforms as transforms
-from torch.optim import lr_scheduler
 
 # check available device for training
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -36,7 +35,8 @@ data_transforms = {
                                  transforms.CenterCrop(image_size),
                                  transforms.ToTensor(),
                                  transforms.Normalize(mean, std)]),
-    "test" : transforms.Compose([transforms.Resize(image_size),
+    "test" : transforms.Compose([transforms.Resize(256),
+                                 transforms.CenterCrop(image_size),
                                  transforms.ToTensor(),
                                  transforms.Normalize(mean, std)])
 }
@@ -53,7 +53,6 @@ dataloaders = {
     "test" : torch.utils.data.DataLoader(image_datasets["test"], batch_size=32)
 }
 
-
 with open('cat_to_name.json', 'r') as f:
     cat_to_name = json.load(f)
 
@@ -64,7 +63,7 @@ print("test images: ", len(image_datasets["test"]))
 print("total labels: ", len(cat_to_name))
 
 ### Training
-def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
+def train_model(model, criterion, optimizer, num_epochs=25):
     since = time.time()
 
     best_model_wts = copy.deepcopy(model.state_dict())
@@ -76,7 +75,6 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 
         for phase in ["train", "valid"]:
             if phase == "train":
-                scheduler.step()
                 model.train()
             else:
                 model.eval()
@@ -113,7 +111,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
             print("{} Loss: {:.4f} Acc: {:.4f}".format(phase, epoch_loss, epoch_acc))
 
             # deep copy the model
-            if phase == "val" and epoch_acc > best_acc:
+            if phase == "valid" and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 best_model_wts = copy.deepcopy(model.state_dict())
 
@@ -127,11 +125,9 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     model.load_state_dict(best_model_wts)
     return model
 
-
 # hyper parameters
-num_epochs = 1
+num_epochs = 5
 learning_rate = 0.001
-momentum = 0.9
 
 # train functions
 model_fn = models.vgg16(pretrained=True)
@@ -161,9 +157,39 @@ model_fn.classifier = classifier
 
 model_fn = model_fn.to(device)
 
-criterion_fn = nn.CrossEntropyLoss()
-optimizer_fn = optim.SGD(model_fn.classifier.parameters(), lr=learning_rate, momentum=momentum)
-scheduler_fn = lr_scheduler.StepLR(optimizer_fn, step_size=7, gamma=0.1)
+criterion_fn = nn.NLLLoss()
+optimizer_fn = optim.Adam(model_fn.classifier.parameters(), lr=learning_rate)
 
 # train model
-model = train_model(model_fn, criterion_fn, optimizer_fn, scheduler_fn, num_epochs)
+model = train_model(model_fn, criterion_fn, optimizer_fn, num_epochs)
+
+# Disabling gradient calculation
+corrects = 0
+total = 0
+total_images = len(dataloaders["test"].batch_sampler) * dataloaders["test"].batch_size
+
+# Disabling gradient calculation
+with torch.no_grad():
+    for inputs, labels in dataloaders["test"]:
+        inputs = inputs.to(device)
+        labels = labels.to(device)
+
+        outputs = model(inputs)
+        _, preds = torch.max(outputs, 1)
+
+        corrects += (preds == labels).sum().item()
+        total += labels.size(0)
+
+print("Accurately classified {:d}%% of {:d} images".format(100 * corrects // total, total_images))
+
+## Save Checkpoint
+model.class_to_idx = image_datasets['train'].class_to_idx
+model_state = {
+    'epoch': num_epochs,
+    'state_dict': model.state_dict(),
+    'optimizer_dict': optimizer_fn.state_dict(),
+    'classifier': classifier,
+    'class_to_idx': model.class_to_idx,
+}
+
+torch.save(model_state, "./vgg16_classifier.pth")
