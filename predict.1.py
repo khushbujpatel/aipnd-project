@@ -24,11 +24,13 @@ class Predictor(object):
 
         self.load_labels(category_names)
 
-    def load_checkpoint(self, ckpt_path):
+    def load_checkpoint(self, ckpt_path, use_gpu):
         """
         Load trained model's checkpoint
         """
-        ckpt_model_state = torch.load(ckpt_path)
+        # Loading weights for CPU model while trained on GPU
+        # https://discuss.pytorch.org/t/loading-weights-for-cpu-model-while-trained-on-gpu/1032
+        ckpt_model_state = torch.load(ckpt_path, map_location=lambda storage, loc: storage)
 
         self.ckpt_model = models.vgg16(pretrained=True)
         self.ckpt_model.classifier = ckpt_model_state['classifier']
@@ -77,7 +79,7 @@ class Predictor(object):
         if use_gpu:
             self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         logging.info("using device: {}".format(self.device))
-        self.load_checkpoint(ckpt_path)
+        self.load_checkpoint(ckpt_path, use_gpu)
 
         self.ckpt_model.eval()
 
@@ -93,7 +95,8 @@ class Predictor(object):
         mapped_classes = list()
 
         for label in top_labels.numpy()[0]:
-            mapped_classes.append(class_to_idx_inv[label])
+            if label in class_to_idx_inv:
+                mapped_classes.append(class_to_idx_inv[label])
 
         return top_prob.numpy()[0], mapped_classes
 
