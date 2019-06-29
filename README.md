@@ -535,18 +535,18 @@ The project submission must include at least two files train.py and predict.py. 
 ### train.py and predict.py
 
 1. Train a new network on a data set with train.py
-   1. Basic usage: python train.py data_directory
+   1. Basic usage: ```python train.py data_directory```
    2. Prints out training loss, validation loss, and validation accuracy as the network trains
    3. Options:
-       1. Set directory to save checkpoints: python train.py data_dir --save_dir save_directory
-       2. Choose architecture: python train.py data_dir --arch "vgg13"
-       3. Set hyperparameters: python train.py data_dir --learning_rate 0.01 --hidden_units 512 --epochs 20
-       4. Use GPU for training: python train.py data_dir --gpu
-2. Predict flower name from an image with predict.py along with the probability of that name. That is, you'll pass in a single image /path/to/image and return the flower name and class probability.
-    1. Basic usage: python predict.py /path/to/image checkpoint
+       1. Set directory to save checkpoints: ```python train.py data_dir --save_dir save_directory```
+       2. Choose architecture: ```python train.py data_dir --arch "vgg13"```
+       3. Set hyperparameters: ```python train.py data_dir --learning_rate 0.01 --hidden_units 512 --epochs 20```
+       4. Use GPU for training: ```python train.py data_dir --gpu```
+2. Predict flower name from an image with predict.py along with the probability of that name. That is, you'll pass in a single image ```/path/to/image``` and return the flower name and class probability.
+    1. Basic usage: ```python predict.py /path/to/image checkpoint```
     2. Options:
-        1. Return top KK most likely classes: python predict.py input checkpoint --top_k 3
-        2. Use a mapping of categories to real names: python predict.py input checkpoint --category_names cat_to_name.json
-        3. Use GPU for inference: python predict.py input checkpoint --gpu
+        1. Return top KK most likely classes: ```python predict.py input checkpoint --top_k 3```
+        2. Use a mapping of categories to real names: ```python predict.py input checkpoint --category_names cat_to_name.json```
+        3. Use GPU for inference: ```python predict.py input checkpoint --gpu```
 
-The best way to get the command line input into the scripts is with the argparse module in the standard library.
+The best way to get the command line input into the scripts is with the ```argparse``` module in the standard library.
